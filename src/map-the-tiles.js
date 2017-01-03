@@ -30,28 +30,21 @@ MapTheTiles.prototype.getTiles = function(extent,zoom) {
     left = (lX * this.size) - lx,
     tiles = [];
 
-  const tilesMap = new Map()
-
   for (var i=lX; i<=rX; i++) {
     top = topStart;
     for(var j=tY; j<=bY; j++) {
-      tilesMap.set(`${zoom}:${i}:${j}`, {
-        top,
-        left
-      })
-      /*tiles.push({
+      tiles.push({
         X:i,
         Y:j,
         Z:zoom,
         top: top,
         left: left
-      });*/
+      });
       top += this.size;
     }
     left += this.size;
   }
-  //return tiles;
-  return tilesMap
+  return tiles;
 };
 
 module.exports = MapTheTiles;
