@@ -9,6 +9,7 @@ class NanoMap {
     this.lng = opts.lng || 0
 
     this.$map = document.getElementById(opts.mapSelector)
+    this.ctx = this.$map.getContext("2d");
     this.width = this.$map.offsetWidth
     this.height = this.$map.offsetHeight
     this.offsetLeft = this.$map.offsetLeft
@@ -24,9 +25,17 @@ class NanoMap {
     console.log(this);
   }
 
+  init() {
+    this._initEvents()
+    const layout = this.renderLayout()
+
+    this._currentLayout = layout
+
+    this.drawTiles()
+  }
+
   _onMove(evt) {
     evt.preventDefault();
-    //console.log('JOO', this.currentClientXY.x, evt.clientX)
     const xDiff = this.currentClientXY.x - evt.clientX
     const yDiff = this.currentClientXY.y - evt.clientY
 
@@ -37,6 +46,8 @@ class NanoMap {
     const R = 6378137
     const lat = this.lat
     const lng = this.lng
+
+    console.log((Math.pow(2, this.zoom)));
 
 
     const dn = xDiff * 10;
@@ -52,6 +63,8 @@ class NanoMap {
 
     this.lat = latO
     this.lng = lngO
+
+    this._recomputeLayout()
   }
 
   _initEvents() {
@@ -80,39 +93,60 @@ class NanoMap {
     $map.addEventListener('mouseleave', () => {
       $map.removeEventListener('mousemove', onMove)
     })
+
+    const $zoomin = document.querySelector('button[name="zoomin"]')
+    $zoomin.addEventListener('click', () => {
+      this.zoom++
+      this._recomputeLayout()
+    })
+
+    const $zoomout = document.querySelector('button[name="zoomout"]')
+    $zoomout.addEventListener('click', (evt) => {
+      this.zoom -= 1
+      this._recomputeLayout()
+    })
   }
 
   _recomputeLayout() {
-    //TODO
-  }
+    const newLayout = this.renderLayout()
+    const $map = this.$map
+    this.ctx.clearRect(0, 0, $map.width, $map.height);
 
-  init() {
-    this._initEvents()
-    const layout = this.renderLayout()
-
-    if(this._currentLayout) {
-      this.updateLayout(layout)
-    } else {
-      this._currentLayout = layout
-    }
+    newLayout.forEach((value, key) => {
+      if(this._currentLayout.has(key)) {
+        const toUpdate = this._currentLayout.get(key)
+        toUpdate.x = value.x
+        toUpdate.y = value.y
+      } else {
+        this._currentLayout.set(key, value)
+      }
+    })
 
     this.drawTiles()
   }
 
+
+
   drawTiles() {
     const layout = this._currentLayout
-    const $map = this.$map
 
     layout.forEach((tile) => {
       if(!tile['$elem']) {
         const img = document.createElement('img')
-        img.style.left = tile.x + 'px'
-        img.style.top = tile.y + 'px'
         img.src = tile.img
-        img.className = 'tile'
-
-        $map.appendChild(img)
         tile['$elem'] = img
+
+        if(!img.complete && !tile.listener) {
+          console.log(tile.listener);
+          img.addEventListener('load', () => {
+            this._recomputeLayout()
+          })
+          tile.listener = true
+        } else {
+          this.ctx.drawImage(tile['$elem'], tile.x, tile.y);
+        }
+      } else {
+        this.ctx.drawImage(tile['$elem'], tile.x, tile.y);
       }
     })
   }
@@ -155,7 +189,8 @@ class NanoMap {
           x: next.left,
           y: next.top,
           img: `http://${subdomain}.tile.osm.org/${next.Z}/${next.X}/${next.Y}.png`,
-          '$elem': null
+          '$elem': null,
+          listener: false
 
       })
     }, new Map())
@@ -167,18 +202,4 @@ const map = new NanoMap({
   lat: 50,
   lng: 19,
   mapSelector: 'map'
-})
-
-
-const $zoomin = document.querySelector('button[name="zoomin"]')
-const $zoomout = document.querySelector('button[name="zoomout"]')
-
-$zoomin.addEventListener('click', (evt) => {
-  zoom += 1
-  console.log(renderTiles());
-})
-
-$zoomout.addEventListener('click', (evt) => {
-  zoom -= 1
-  console.log(renderTiles());
 })
