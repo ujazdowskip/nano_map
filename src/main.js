@@ -1,6 +1,13 @@
 import map_utils from './map_utils'
 import MapTheTiles from './map-the-tiles'
+import CRS from './crs'
+import Point from './point'
+import LatLng from './latlng'
 
+window.NM = {
+  Point,
+  LatLng
+}
 
 class NanoMap {
   constructor(opts) {
@@ -14,6 +21,7 @@ class NanoMap {
     this.height = this.$map.offsetHeight
     this.offsetLeft = this.$map.offsetLeft
     this.offsetTop = this.$map.offsetTop
+    this.crs = new CRS()
 
 
     this.tiler = new MapTheTiles(null, 256)
@@ -34,10 +42,24 @@ class NanoMap {
     this.drawTiles()
   }
 
+  getSize() {
+		if (!this._size || this._sizeChanged) {
+      const {width, height} = this
+
+      this._size = new Point(width,height)
+
+			this._sizeChanged = false;
+		}
+		return this._size.clone();
+	}
+
+
   _onMove(evt) {
     evt.preventDefault();
     const xDiff = this.currentClientXY.x - evt.clientX
     const yDiff = this.currentClientXY.y - evt.clientY
+
+    console.log(evt.clientX, evt.clientY);
 
     //Update to our new coordinates
     this.currentClientXY.x = evt.clientX
@@ -46,8 +68,6 @@ class NanoMap {
     const R = 6378137
     const lat = this.lat
     const lng = this.lng
-
-    console.log((Math.pow(2, this.zoom)));
 
 
     const dn = xDiff * 10;
@@ -70,6 +90,9 @@ class NanoMap {
   _initEvents() {
     const $map = this.$map
     console.log({map: $map});
+
+    //TODO on container size change
+    //this._sizeChanged = true
 
 
     const onMove = this._onMove.bind(this)
