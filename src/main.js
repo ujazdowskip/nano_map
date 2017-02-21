@@ -59,7 +59,7 @@ class NanoMap {
     const xDiff = this.currentClientXY.x - evt.clientX
     const yDiff = this.currentClientXY.y - evt.clientY
 
-    console.log(evt.clientX, evt.clientY);
+    //console.log(evt.clientX, evt.clientY);
 
     //Update to our new coordinates
     this.currentClientXY.x = evt.clientX
@@ -103,6 +103,8 @@ class NanoMap {
         x: evt.clientX,
         y: evt.clientY
       }
+
+      console.log(this.currentClientXY);
 
       evt.preventDefault()
       $map.addEventListener('mousemove', onMove)
@@ -218,6 +220,72 @@ class NanoMap {
       })
     }, new Map())
   }
+
+  _getMapPanePos() {
+    var position = L.DomUtil.getPosition(this._mapPane) || new L.Point(0, 0);
+    console.log(position);
+    return position
+  }
+
+  // @method getSize(): Point
+	// Returns the current size of the map container (in pixels).
+	getSize () {
+    return new Point(this.width, this.height)
+	}
+
+  _getNewPixelOrigin(center, zoom) {
+		const viewHalf = this.getSize()._divideBy(2);
+		const projectedCenter = this.project(center, zoom)
+
+    return projectedCenter._subtract(viewHalf) //._add(this._getMapPanePos())._round();
+	}
+
+  getPixelOrigin() {
+    const {lat, lng, zoom} = this
+
+    return this._getNewPixelOrigin({lat, lng}, zoom)
+  }
+
+  // @method latLngToLayerPoint(latlng: LatLng): Point
+	// Given a geographical coordinate, returns the corresponding pixel coordinate
+	// relative to the [origin pixel](#map-getpixelorigin).
+	latLngToLayerPoint(latlng) {
+    //?
+    const pixelOrigin = this.getPixelOrigin()
+		const projectedPoint = this.crs.projection.project(new LatLng(latlng))._round();
+		return projectedPoint._subtract(pixelOrigin);
+	}
+
+  latLngToContainerPoint(latlng) {
+    //TODO this should return point relative to container
+	}
+
+  containerPointToLatLng(point) {
+    const origin = this.getPixelOrigin()
+    console.log('origin', origin);
+		const projectedPoint = new Point(point).add(origin)
+
+    console.log('projectedPoint', projectedPoint);
+
+    const unprojected = this.unproject(projectedPoint);
+
+    console.log('unprojected', unprojected);
+
+		return unprojected
+	}
+
+  project(latlng, zoom) {
+		zoom = zoom === undefined ? this.zoom : zoom;
+		return this.crs.latLngToPoint(new LatLng(latlng), zoom);
+	}
+
+	// @method unproject(point: Point, zoom: Number): LatLng
+	// Inverse of [`project`](#map-project).
+	unproject(point, zoom) {
+		zoom = zoom === undefined ? this.zoom : zoom;
+
+		return this.crs.pointToLatLng(new Point(point), zoom);
+	}
 }
 
 const map = new NanoMap({

@@ -1,4 +1,4 @@
-import LatLng from './point'
+import LatLng from './latlng'
 import Point from './point'
 
 const {min, max, sin, log, PI, atan, exp} = Math
@@ -8,12 +8,13 @@ class SphericalMercator {
 	constructor() {
 		this.R = 6378137
 		this.MAX_LATITUDE = 85.0511287798
-		this.d = PI / 180
 	}
 
-
+	// @method project(latlng: LatLng): Point
+	// converts latlng to Point (meters)
 	project(latlng) {
-		const d = this.d
+		//convert [lng, lat] to meters
+		const d = Math.PI / 180
 		const R = this.R
 		const maxLat = this.MAX_LATITUDE
 		const lat = max(min(maxLat, latlng.lat), -maxLat)
@@ -25,8 +26,10 @@ class SphericalMercator {
 		)
 	}
 
+	// @method unproject(point: Point): LatLng
+	// converts point (in meters) to LatLng
 	unproject(point) {
-		const d = this.d
+		const d = 180 / Math.PI
 		const R = this.R
 
 		return new LatLng(
