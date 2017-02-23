@@ -42,57 +42,32 @@ class NanoMap {
     this.drawTiles()
   }
 
-  getSize() {
-		if (!this._size || this._sizeChanged) {
-      const {width, height} = this
-
-      this._size = new Point(width,height)
-
-			this._sizeChanged = false;
-		}
-		return this._size.clone();
-	}
-
 
   _onMove(evt) {
     evt.preventDefault();
-    const xDiff = this.currentClientXY.x - evt.clientX
-    const yDiff = this.currentClientXY.y - evt.clientY
 
-    //console.log(evt.clientX, evt.clientY);
+    const xDiff = this.currentClientXY.x - evt.layerX
+    const yDiff = this.currentClientXY.y - evt.layerY
 
-    //Update to our new coordinates
-    this.currentClientXY.x = evt.clientX
-    this.currentClientXY.y = evt.clientY
-
-    const R = 6378137
-    const lat = this.lat
-    const lng = this.lng
+    this.currentClientXY.x = this.currentClientXY.x - xDiff
+    this.currentClientXY.y = this.currentClientXY.y - yDiff
 
 
-    const dn = xDiff * 10;
-    const de = yDiff * 5;
+    this.currentPixelCenter = this.currentPixelCenter.add({
+      x: xDiff,
+      y: yDiff
+    })
 
-    //Coordinate offsets in radians
-    const dLat = de/R || 0;
-    const dLng = dn/R || 0;
+    const newLatLng = this.unproject(this.currentPixelCenter)
 
-    //OffsetPosition, decimal degrees
-    const latO = lat - dLat * 180/Math.PI;
-    const lngO = lng + dLng * 180/Math.PI;
-
-    this.lat = latO
-    this.lng = lngO
+    this.lat = newLatLng.lat
+    this.lng = newLatLng.lng
 
     this._recomputeLayout()
   }
 
   _initEvents() {
     const $map = this.$map
-    console.log({map: $map});
-
-    //TODO on container size change
-    //this._sizeChanged = true
 
 
     const onMove = this._onMove.bind(this)
@@ -100,11 +75,15 @@ class NanoMap {
     $map.addEventListener('mousedown', (evt) => {
 
       this.currentClientXY = {
-        x: evt.clientX,
-        y: evt.clientY
+        x: evt.layerX,
+        y: evt.layerY
       }
 
-      console.log(this.currentClientXY);
+
+      this.currentPixelCenter = this.getPixelOrigin().add({
+        x: 300,
+        y: 300
+      })
 
       evt.preventDefault()
       $map.addEventListener('mousemove', onMove)
@@ -112,6 +91,8 @@ class NanoMap {
 
     $map.addEventListener('mouseup', () => {
       this.currentClientXY = {}
+      this.currentPixelCenter = null
+
       $map.removeEventListener('mousemove', onMove)
     })
 
@@ -162,7 +143,6 @@ class NanoMap {
         tile['$elem'] = img
 
         if(!img.complete && !tile.listener) {
-          console.log(tile.listener);
           img.addEventListener('load', () => {
             this._recomputeLayout()
           })
@@ -176,31 +156,18 @@ class NanoMap {
     })
   }
 
-  degrees2meters(lon, lat) {
-    const x = lon * 20037508.34 / 180;
-    let y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
-
-    y = y * 20037508.34 / 180;
-
-    return [x, y];
-  }
-
-  meters2degress(x,y) {
-    const lon = x *  180 / 20037508.34 ;
-    const lat = Number(180 / Math.PI * (2 * Math.atan(Math.exp(y * Math.PI / 180)) - Math.PI / 2));
-    return [lon, lat]
-  }
-
   renderLayout() {
+    //TODO use crs!!!
     const bounds = map_utils.calcBounds(this.lat, this.lng, this.zoom, this.width, this.height)
-    const topLeftMeters = this.degrees2meters(bounds.left, bounds.top)
-    const bottomRightMeters = this.degrees2meters(bounds.right, bounds.bottom)
+
+    const topLeftMeters = this.crs.projection.project({lng: bounds.left, lat: bounds.top})
+    const bottomRightMeters = this.crs.projection.project({lng: bounds.right, lat: bounds.bottom})
 
     const layoutForBounds = {
-        top: topLeftMeters[1],
-        left: topLeftMeters[0],
-        right: bottomRightMeters[0],
-        bottom: bottomRightMeters[1]
+        top: topLeftMeters.y,
+        left: topLeftMeters.x,
+        right: bottomRightMeters.x,
+        bottom: bottomRightMeters.y
     }
     const subdomains = ['a', 'b', 'c']
 
@@ -219,12 +186,6 @@ class NanoMap {
 
       })
     }, new Map())
-  }
-
-  _getMapPanePos() {
-    var position = L.DomUtil.getPosition(this._mapPane) || new L.Point(0, 0);
-    console.log(position);
-    return position
   }
 
   // @method getSize(): Point
@@ -246,32 +207,14 @@ class NanoMap {
     return this._getNewPixelOrigin({lat, lng}, zoom)
   }
 
-  // @method latLngToLayerPoint(latlng: LatLng): Point
-	// Given a geographical coordinate, returns the corresponding pixel coordinate
-	// relative to the [origin pixel](#map-getpixelorigin).
-	latLngToLayerPoint(latlng) {
-    //?
-    const pixelOrigin = this.getPixelOrigin()
-		const projectedPoint = this.crs.projection.project(new LatLng(latlng))._round();
-		return projectedPoint._subtract(pixelOrigin);
-	}
-
   latLngToContainerPoint(latlng) {
     //TODO this should return point relative to container
 	}
 
   containerPointToLatLng(point) {
     const origin = this.getPixelOrigin()
-    console.log('origin', origin);
-		const projectedPoint = new Point(point).add(origin)
 
-    console.log('projectedPoint', projectedPoint);
-
-    const unprojected = this.unproject(projectedPoint);
-
-    console.log('unprojected', unprojected);
-
-		return unprojected
+    return this.unproject(origin.add(point));
 	}
 
   project(latlng, zoom) {
