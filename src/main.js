@@ -10,7 +10,7 @@ window.NM = {
 
 class NanoMap {
   constructor(opts) {
-    this.zoom = opts.zoom || 10
+    //this.zoom = opts.zoom || 10
     this.lat = opts.lat || 0
     this.lng = opts.lng || 0
 
@@ -20,10 +20,27 @@ class NanoMap {
     this.height = this.$map.offsetHeight
     this.offsetLeft = this.$map.offsetLeft
     this.offsetTop = this.$map.offsetTop
-    this.crs = new CRS()
 
+    var z = opts.zoom || 10
 
-    this.tiler = new MapTheTiles(null, 256)
+    this.crs = new CRS({
+      zoom: z
+    })
+
+    Object.defineProperty(this, 'zoom', {
+      get() {
+        return z
+      },
+
+      set(value) {
+        const newTileSize = 256 + 256 * (value % 1)
+
+        this.crs.tileSize = newTileSize
+        z = value
+
+        this._recomputeLayout()
+      }
+    });
 
     this._currentLayout = null
 
@@ -98,6 +115,12 @@ class NanoMap {
       $map.removeEventListener('mousemove', onMove)
     })
 
+    $map.addEventListener('wheel', (evt) => {
+      const val = evt.deltaY / 4 / 100
+
+      this.zoom += val
+    })
+
     const $zoomin = document.querySelector('button[name="zoomin"]')
     $zoomin.addEventListener('click', () => {
       this.zoom++
@@ -133,6 +156,7 @@ class NanoMap {
 
   drawTiles() {
     const layout = this._currentLayout
+    const tileSize = this.crs.tileSize
 
     layout.forEach((tile) => {
       if(!tile['$elem']) {
@@ -146,12 +170,33 @@ class NanoMap {
           })
           tile.listener = true
         } else {
-          this.ctx.drawImage(tile['$elem'], tile.x, tile.y);
+          if(Math.floor(this.zoom) === tile.z) {
+            this._drawTile(tile, tileSize)
+          }
         }
       } else {
-        this.ctx.drawImage(tile['$elem'], tile.x, tile.y);
+        if(Math.floor(this.zoom) === tile.z) {
+          this._drawTile(tile, tileSize)
+        }
       }
     })
+  }
+
+  _drawTile(tile, size) {
+    const {x, y} = tile
+
+    this.ctx.drawImage(tile['$elem'], x, y, size, size);
+
+    this.ctx.beginPath();
+    this.ctx.moveTo(x, y);
+    this.ctx.lineTo(x + size, y);
+    this.ctx.lineTo(x + size, y + size);
+    this.ctx.lineTo(x, y + size);
+    this.ctx.lineTo(x, y);
+    this.ctx.stroke();
+
+    this.ctx.font = '20px serif';
+    this.ctx.fillText(tile.zxy, x + 20, y + size / 2)
   }
 
   renderLayout() {
@@ -168,16 +213,22 @@ class NanoMap {
     }
     const subdomains = ['a', 'b', 'c']
 
-    const tiles = this.tiler.getTiles(layoutForBounds, this.zoom);
+    const tiler = new MapTheTiles(null, this.crs.tileSize)
+    const tiles = tiler.getTiles(layoutForBounds, this.zoom);
+    //const tiles = this.tiler.getTiles(layoutForBounds, this.zoom);
 
     return tiles.reduce((prev, next) => {
       const subdomainIndex = Math.abs(next.X + next.Y) % subdomains.length;
       const subdomain = subdomains[subdomainIndex];
+      const z = Math.floor(next.Z)
+      const mapKey = `${z}:${next.X}:${next.Y}`
 
-      return prev.set(`${next.Z}:${next.X}:${next.Y}`, {
+      return prev.set(mapKey, {
           x: next.left,
           y: next.top,
-          img: `http://${subdomain}.tile.osm.org/${next.Z}/${next.X}/${next.Y}.png`,
+          z: z,
+          zxy: `${z}:${next.X}:${next.Y}`,
+          img: `http://${subdomain}.tile.osm.org/${z}/${next.X}/${next.Y}.png`,
           '$elem': null,
           listener: false
 

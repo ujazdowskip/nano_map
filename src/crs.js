@@ -4,8 +4,9 @@ import Transformation from './transformation'
 
 class CRS {
 
-	constructor() {
+	constructor(opts) {
 		this.projection = new SphericalMercator()
+		this.tileSize = 256 + 256 * (opts.zoom % 1)
 		const earthRadius = 6378137
 
 		const scale = 0.5 / (PI * earthRadius);
@@ -18,14 +19,14 @@ class CRS {
 	// pixel coordinates for a particular zoom.
 	// `256 * 2^zoom` for Mercator-based CRS.
 	scale(zoom) {
-		return 256 * Math.pow(2, zoom);
+		return this.tileSize * Math.pow(2, zoom);
 	}
 
 	// @method zoom(scale: Number): Number
 	// Inverse of `scale()`, returns the zoom level corresponding to a scale
 	// factor of `scale`.
 	zoom(scale) {
-		return Math.log(scale / 256) / Math.LN2;
+		return Math.log(scale / this.tileSize) / Math.LN2;
 	}
 
 	// @method latLngToPoint(latlng: LatLng, zoom: Number): Point

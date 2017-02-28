@@ -7,13 +7,15 @@ const MapTheTiles = function (projExtent,tileSize) {
     top: 20037508.342789244
   };
   this.size = tileSize || 256;
+
   this.maxRes = Math.min(
     Math.abs(this.projExtent.right - this.projExtent.left)/this.size,
     Math.abs(this.projExtent.top - this.projExtent.bottom)/this.size);
 }
 
 MapTheTiles.prototype.getTiles = function(extent,zoom) {
-  var res = this.maxRes/Math.pow(2,zoom),
+  //var res = this.maxRes/Math.pow(2,zoom),
+  var res = this.maxRes/Math.pow(2,Math.floor(zoom)),
     //coordinated in pixel
     lx = Math.floor((extent.left - this.projExtent.left)/res),
     rx = Math.floor((extent.right - this.projExtent.left)/res),
