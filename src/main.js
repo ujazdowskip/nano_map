@@ -1,4 +1,3 @@
-import map_utils from './map_utils'
 import MapTheTiles from './map-the-tiles'
 import CRS from './crs'
 import Point from './point'
@@ -79,7 +78,6 @@ class NanoMap {
         y: evt.layerY
       }
 
-
       this.currentPixelCenter = this.getPixelOrigin().add({
         x: 300,
         y: 300
@@ -157,8 +155,7 @@ class NanoMap {
   }
 
   renderLayout() {
-    //TODO use crs!!!
-    const bounds = map_utils.calcBounds(this.lat, this.lng, this.zoom, this.width, this.height)
+    const bounds = this.getBounds()
 
     const topLeftMeters = this.crs.projection.project({lng: bounds.left, lat: bounds.top})
     const bottomRightMeters = this.crs.projection.project({lng: bounds.right, lat: bounds.bottom})
@@ -188,6 +185,30 @@ class NanoMap {
     }, new Map())
   }
 
+  getBounds() {
+    const {lat, lng, width, height} = this
+    const centerPx = this.latLngToContainerPoint({lng, lat})
+
+    const SWLatLng = this.containerPointToLatLng(centerPx.add({
+      x: -width / 2,
+      y: height / 2
+    }))
+
+    const NELatLng = this.containerPointToLatLng(centerPx.add({
+      x: width / 2,
+      y: -height / 2
+    }))
+
+    return {
+      bounds: [SWLatLng.lng, SWLatLng.lat, NELatLng.lng, NELatLng.lat], // [w, s, e, n]
+      bbox: SWLatLng.lng + ',' + SWLatLng.lat + ',' + NELatLng.lng + ',' + NELatLng.lat,
+      top: NELatLng.lat,
+      right: NELatLng.lng,
+      bottom: SWLatLng.lat,
+      left: SWLatLng.lng
+    };
+  }
+
   // @method getSize(): Point
 	// Returns the current size of the map container (in pixels).
 	getSize () {
@@ -208,7 +229,8 @@ class NanoMap {
   }
 
   latLngToContainerPoint(latlng) {
-    //TODO this should return point relative to container
+    const projectedPoint = this.project(latlng)
+		return projectedPoint._subtract(this.getPixelOrigin())
 	}
 
   containerPointToLatLng(point) {
