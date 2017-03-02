@@ -1,21 +1,46 @@
-import map_utils from './map_utils'
 import MapTheTiles from './map-the-tiles'
+import CRS from './crs'
+import Point from './point'
+import LatLng from './latlng'
 
+window.NM = {
+  Point,
+  LatLng
+}
 
 class NanoMap {
   constructor(opts) {
-    this.zoom = opts.zoom || 10
+    //this.zoom = opts.zoom || 10
     this.lat = opts.lat || 0
     this.lng = opts.lng || 0
 
     this.$map = document.getElementById(opts.mapSelector)
+    this.ctx = this.$map.getContext("2d");
     this.width = this.$map.offsetWidth
     this.height = this.$map.offsetHeight
     this.offsetLeft = this.$map.offsetLeft
     this.offsetTop = this.$map.offsetTop
 
+    var z = opts.zoom || 10
 
-    this.tiler = new MapTheTiles(null, 256)
+    this.crs = new CRS({
+      zoom: z
+    })
+
+    Object.defineProperty(this, 'zoom', {
+      get() {
+        return z
+      },
+
+      set(value) {
+        const newTileSize = 256 + 256 * (value % 1)
+
+        this.crs.tileSize = newTileSize
+        z = value
+
+        this._recomputeLayout()
+      }
+    });
 
     this._currentLayout = null
 
@@ -24,39 +49,41 @@ class NanoMap {
     console.log(this);
   }
 
+  init() {
+    this._initEvents()
+    const layout = this.renderLayout()
+
+    this._currentLayout = layout
+
+    this.drawTiles()
+  }
+
+
   _onMove(evt) {
     evt.preventDefault();
-    //console.log('JOO', this.currentClientXY.x, evt.clientX)
-    const xDiff = this.currentClientXY.x - evt.clientX
-    const yDiff = this.currentClientXY.y - evt.clientY
 
-    //Update to our new coordinates
-    this.currentClientXY.x = evt.clientX
-    this.currentClientXY.y = evt.clientY
+    const xDiff = this.currentClientXY.x - evt.layerX
+    const yDiff = this.currentClientXY.y - evt.layerY
 
-    const R = 6378137
-    const lat = this.lat
-    const lng = this.lng
+    this.currentClientXY.x = this.currentClientXY.x - xDiff
+    this.currentClientXY.y = this.currentClientXY.y - yDiff
 
 
-    const dn = xDiff * 10;
-    const de = yDiff * 5;
+    this.currentPixelCenter = this.currentPixelCenter.add({
+      x: xDiff,
+      y: yDiff
+    })
 
-    //Coordinate offsets in radians
-    const dLat = de/R || 0;
-    const dLng = dn/R || 0;
+    const newLatLng = this.unproject(this.currentPixelCenter)
 
-    //OffsetPosition, decimal degrees
-    const latO = lat - dLat * 180/Math.PI;
-    const lngO = lng + dLng * 180/Math.PI;
+    this.lat = newLatLng.lat
+    this.lng = newLatLng.lng
 
-    this.lat = latO
-    this.lng = lngO
+    this._recomputeLayout()
   }
 
   _initEvents() {
     const $map = this.$map
-    console.log({map: $map});
 
 
     const onMove = this._onMove.bind(this)
@@ -64,9 +91,14 @@ class NanoMap {
     $map.addEventListener('mousedown', (evt) => {
 
       this.currentClientXY = {
-        x: evt.clientX,
-        y: evt.clientY
+        x: evt.layerX,
+        y: evt.layerY
       }
+
+      this.currentPixelCenter = this.getPixelOrigin().add({
+        x: 300,
+        y: 300
+      })
 
       evt.preventDefault()
       $map.addEventListener('mousemove', onMove)
@@ -74,92 +106,202 @@ class NanoMap {
 
     $map.addEventListener('mouseup', () => {
       this.currentClientXY = {}
+      this.currentPixelCenter = null
+
       $map.removeEventListener('mousemove', onMove)
     })
 
     $map.addEventListener('mouseleave', () => {
       $map.removeEventListener('mousemove', onMove)
     })
+
+    $map.addEventListener('wheel', (evt) => {
+      const val = evt.deltaY / 4 / 100
+
+      this.zoom += val
+    })
+
+    const $zoomin = document.querySelector('button[name="zoomin"]')
+    $zoomin.addEventListener('click', () => {
+      this.zoom++
+      this._recomputeLayout()
+    })
+
+    const $zoomout = document.querySelector('button[name="zoomout"]')
+    $zoomout.addEventListener('click', (evt) => {
+      this.zoom -= 1
+      this._recomputeLayout()
+    })
   }
 
   _recomputeLayout() {
-    //TODO
-  }
+    const newLayout = this.renderLayout()
+    const $map = this.$map
+    this.ctx.clearRect(0, 0, $map.width, $map.height);
 
-  init() {
-    this._initEvents()
-    const layout = this.renderLayout()
-
-    if(this._currentLayout) {
-      this.updateLayout(layout)
-    } else {
-      this._currentLayout = layout
-    }
+    newLayout.forEach((value, key) => {
+      if(this._currentLayout.has(key)) {
+        const toUpdate = this._currentLayout.get(key)
+        toUpdate.x = value.x
+        toUpdate.y = value.y
+      } else {
+        this._currentLayout.set(key, value)
+      }
+    })
 
     this.drawTiles()
   }
 
+
+
   drawTiles() {
     const layout = this._currentLayout
-    const $map = this.$map
+    const tileSize = this.crs.tileSize
 
     layout.forEach((tile) => {
       if(!tile['$elem']) {
         const img = document.createElement('img')
-        img.style.left = tile.x + 'px'
-        img.style.top = tile.y + 'px'
         img.src = tile.img
-        img.className = 'tile'
-
-        $map.appendChild(img)
         tile['$elem'] = img
+
+        if(!img.complete && !tile.listener) {
+          img.addEventListener('load', () => {
+            this._recomputeLayout()
+          })
+          tile.listener = true
+        } else {
+          if(Math.floor(this.zoom) === tile.z) {
+            this._drawTile(tile, tileSize)
+          }
+        }
+      } else {
+        if(Math.floor(this.zoom) === tile.z) {
+          this._drawTile(tile, tileSize)
+        }
       }
     })
   }
 
-  degrees2meters(lon, lat) {
-    const x = lon * 20037508.34 / 180;
-    let y = Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180);
+  _drawTile(tile, size) {
+    const {x, y} = tile
 
-    y = y * 20037508.34 / 180;
+    this.ctx.drawImage(tile['$elem'], x, y, size, size);
 
-    return [x, y];
-  }
+    this.ctx.beginPath();
+    this.ctx.moveTo(x, y);
+    this.ctx.lineTo(x + size, y);
+    this.ctx.lineTo(x + size, y + size);
+    this.ctx.lineTo(x, y + size);
+    this.ctx.lineTo(x, y);
+    this.ctx.stroke();
 
-  meters2degress(x,y) {
-    const lon = x *  180 / 20037508.34 ;
-    const lat = Number(180 / Math.PI * (2 * Math.atan(Math.exp(y * Math.PI / 180)) - Math.PI / 2));
-    return [lon, lat]
+    this.ctx.font = '20px serif';
+    this.ctx.fillText(tile.zxy, x + 20, y + size / 2)
   }
 
   renderLayout() {
-    const bounds = map_utils.calcBounds(this.lat, this.lng, this.zoom, this.width, this.height)
-    const topLeftMeters = this.degrees2meters(bounds.left, bounds.top)
-    const bottomRightMeters = this.degrees2meters(bounds.right, bounds.bottom)
+    const bounds = this.getBounds()
+
+    const topLeftMeters = this.crs.projection.project({lng: bounds.left, lat: bounds.top})
+    const bottomRightMeters = this.crs.projection.project({lng: bounds.right, lat: bounds.bottom})
 
     const layoutForBounds = {
-        top: topLeftMeters[1],
-        left: topLeftMeters[0],
-        right: bottomRightMeters[0],
-        bottom: bottomRightMeters[1]
+        top: topLeftMeters.y,
+        left: topLeftMeters.x,
+        right: bottomRightMeters.x,
+        bottom: bottomRightMeters.y
     }
     const subdomains = ['a', 'b', 'c']
 
-    const tiles = this.tiler.getTiles(layoutForBounds, this.zoom);
+    const tiler = new MapTheTiles(null, this.crs.tileSize)
+    const tiles = tiler.getTiles(layoutForBounds, this.zoom);
+    //const tiles = this.tiler.getTiles(layoutForBounds, this.zoom);
 
     return tiles.reduce((prev, next) => {
       const subdomainIndex = Math.abs(next.X + next.Y) % subdomains.length;
       const subdomain = subdomains[subdomainIndex];
+      const z = Math.floor(next.Z)
+      const mapKey = `${z}:${next.X}:${next.Y}`
 
-      return prev.set(`${next.Z}:${next.X}:${next.Y}`, {
+      return prev.set(mapKey, {
           x: next.left,
           y: next.top,
-          img: `http://${subdomain}.tile.osm.org/${next.Z}/${next.X}/${next.Y}.png`,
-          '$elem': null
+          z: z,
+          zxy: `${z}:${next.X}:${next.Y}`,
+          img: `http://${subdomain}.tile.osm.org/${z}/${next.X}/${next.Y}.png`,
+          '$elem': null,
+          listener: false
 
       })
     }, new Map())
   }
+
+  getBounds() {
+    const {lat, lng, width, height} = this
+    const centerPx = this.latLngToContainerPoint({lng, lat})
+
+    const SWLatLng = this.containerPointToLatLng(centerPx.add({
+      x: -width / 2,
+      y: height / 2
+    }))
+
+    const NELatLng = this.containerPointToLatLng(centerPx.add({
+      x: width / 2,
+      y: -height / 2
+    }))
+
+    return {
+      bounds: [SWLatLng.lng, SWLatLng.lat, NELatLng.lng, NELatLng.lat], // [w, s, e, n]
+      bbox: SWLatLng.lng + ',' + SWLatLng.lat + ',' + NELatLng.lng + ',' + NELatLng.lat,
+      top: NELatLng.lat,
+      right: NELatLng.lng,
+      bottom: SWLatLng.lat,
+      left: SWLatLng.lng
+    };
+  }
+
+  // @method getSize(): Point
+	// Returns the current size of the map container (in pixels).
+	getSize () {
+    return new Point(this.width, this.height)
+	}
+
+  _getNewPixelOrigin(center, zoom) {
+		const viewHalf = this.getSize()._divideBy(2);
+		const projectedCenter = this.project(center, zoom)
+
+    return projectedCenter._subtract(viewHalf) //._add(this._getMapPanePos())._round();
+	}
+
+  getPixelOrigin() {
+    const {lat, lng, zoom} = this
+
+    return this._getNewPixelOrigin({lat, lng}, zoom)
+  }
+
+  latLngToContainerPoint(latlng) {
+    const projectedPoint = this.project(latlng)
+		return projectedPoint._subtract(this.getPixelOrigin())
+	}
+
+  containerPointToLatLng(point) {
+    const origin = this.getPixelOrigin()
+
+    return this.unproject(origin.add(point));
+	}
+
+  project(latlng, zoom) {
+		zoom = zoom === undefined ? this.zoom : zoom;
+		return this.crs.latLngToPoint(new LatLng(latlng), zoom);
+	}
+
+	// @method unproject(point: Point, zoom: Number): LatLng
+	// Inverse of [`project`](#map-project).
+	unproject(point, zoom) {
+		zoom = zoom === undefined ? this.zoom : zoom;
+
+		return this.crs.pointToLatLng(new Point(point), zoom);
+	}
 }
 
 const map = new NanoMap({
@@ -167,18 +309,4 @@ const map = new NanoMap({
   lat: 50,
   lng: 19,
   mapSelector: 'map'
-})
-
-
-const $zoomin = document.querySelector('button[name="zoomin"]')
-const $zoomout = document.querySelector('button[name="zoomout"]')
-
-$zoomin.addEventListener('click', (evt) => {
-  zoom += 1
-  console.log(renderTiles());
-})
-
-$zoomout.addEventListener('click', (evt) => {
-  zoom -= 1
-  console.log(renderTiles());
 })
