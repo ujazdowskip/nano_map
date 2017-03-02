@@ -10,7 +10,6 @@ window.NM = {
 
 class NanoMap {
   constructor(opts) {
-    //this.zoom = opts.zoom || 10
     this.lat = opts.lat || 0
     this.lng = opts.lng || 0
 
@@ -33,6 +32,7 @@ class NanoMap {
       },
 
       set(value) {
+        //FIXME problem with center when zoom cros whole value
         const newTileSize = 256 + 256 * (value % 1)
 
         this.crs.tileSize = newTileSize
@@ -45,8 +45,6 @@ class NanoMap {
     this._currentLayout = null
 
     this.init()
-
-    console.log(this);
   }
 
   init() {
@@ -305,7 +303,7 @@ class NanoMap {
 }
 
 const map = new NanoMap({
-  zoom: 10,
+  zoom: 10.5,
   lat: 50,
   lng: 19,
   mapSelector: 'map'

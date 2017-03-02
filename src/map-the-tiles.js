@@ -14,23 +14,27 @@ const MapTheTiles = function (projExtent,tileSize) {
 }
 
 MapTheTiles.prototype.getTiles = function(extent,zoom) {
-  //var res = this.maxRes/Math.pow(2,zoom),
-  var res = this.maxRes/Math.pow(2,Math.floor(zoom)),
-    //coordinated in pixel
-    lx = Math.floor((extent.left - this.projExtent.left)/res),
-    rx = Math.floor((extent.right - this.projExtent.left)/res),
-    by = Math.floor((this.projExtent.top - extent.bottom )/res),
-    ty = Math.floor((this.projExtent.top - extent.top )/res),
-    // tile numbers
-    lX = Math.floor(lx/this.size),
-    rX = Math.floor(rx/this.size),
-    bY = Math.floor(by/this.size),
-    tY = Math.floor(ty/this.size),
-    //top left tile position of top-left tile with respect to window/div
-    top = (tY * this.size) - ty,
-    topStart = (tY * this.size) - ty,
-    left = (lX * this.size) - lx,
-    tiles = [];
+  const edgeTileCount = Math.pow(2,Math.floor(zoom))
+  const res = this.maxRes/edgeTileCount
+
+  //coordinated in pixel
+  const lx = Math.floor((extent.left - this.projExtent.left)/res)
+  const rx = Math.floor((extent.right - this.projExtent.left)/res)
+  const by = Math.floor((this.projExtent.top - extent.bottom )/res)
+  const ty = Math.floor((this.projExtent.top - extent.top )/res)
+
+
+  const lX = Math.floor(lx/this.size) //left tile num
+  const rX = Math.ceil(rx/this.size) //right tile num
+  const tY = Math.floor(ty/this.size) //top tile num
+  const bY = Math.ceil(by/this.size) //bottom tile num
+
+  //top left tile position of top-left tile with respect to window/div
+  let top = (tY * this.size) - ty
+  const topStart = (tY * this.size) - ty
+  let left = (lX * this.size) - lx
+  const tiles = []
+
 
   for (var i=lX; i<=rX; i++) {
     top = topStart;
@@ -38,7 +42,7 @@ MapTheTiles.prototype.getTiles = function(extent,zoom) {
       tiles.push({
         X:i,
         Y:j,
-        Z:zoom,
+        Z:Math.floor(zoom),
         top: top,
         left: left
       });
@@ -46,6 +50,7 @@ MapTheTiles.prototype.getTiles = function(extent,zoom) {
     }
     left += this.size;
   }
+
   return tiles;
 };
 
