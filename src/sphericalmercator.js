@@ -13,7 +13,6 @@ class SphericalMercator {
 	// @method project(latlng: LatLng): Point
 	// converts latlng to Point (meters)
 	project(latlng) {
-		//convert [lng, lat] to meters
 		const d = Math.PI / 180
 		const R = this.R
 		const maxLat = this.MAX_LATITUDE

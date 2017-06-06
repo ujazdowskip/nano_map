@@ -20,11 +20,15 @@ class NanoMap {
     this.offsetLeft = this.$map.offsetLeft
     this.offsetTop = this.$map.offsetTop
 
-    var z = opts.zoom || 10
+    var z = opts.zoom
 
     this.crs = new CRS({
       zoom: z
     })
+
+    if (opts.onZoom) {
+      opts.onZoom(z)
+    }
 
     Object.defineProperty(this, 'zoom', {
       get() {
@@ -39,6 +43,10 @@ class NanoMap {
         z = value
 
         this._recomputeLayout()
+
+        if (opts.onZoom) {
+          opts.onZoom(value)
+        }
       }
     });
 
@@ -66,7 +74,6 @@ class NanoMap {
     this.currentClientXY.x = this.currentClientXY.x - xDiff
     this.currentClientXY.y = this.currentClientXY.y - yDiff
 
-
     this.currentPixelCenter = this.currentPixelCenter.add({
       x: xDiff,
       y: yDiff
@@ -83,8 +90,8 @@ class NanoMap {
   _initEvents() {
     const $map = this.$map
 
-
     const onMove = this._onMove.bind(this)
+    const onScroll = this._onScroll.bind(this)
 
     $map.addEventListener('mousedown', (evt) => {
 
@@ -92,6 +99,8 @@ class NanoMap {
         x: evt.layerX,
         y: evt.layerY
       }
+
+      //this.currentPixelCenter = this.getPixelOrigin()
 
       this.currentPixelCenter = this.getPixelOrigin().add({
         x: 300,
@@ -113,11 +122,7 @@ class NanoMap {
       $map.removeEventListener('mousemove', onMove)
     })
 
-    $map.addEventListener('wheel', (evt) => {
-      const val = evt.deltaY / 4 / 100
-
-      this.zoom += val
-    })
+    $map.addEventListener('wheel', onScroll)
 
     const $zoomin = document.querySelector('button[name="zoomin"]')
     $zoomin.addEventListener('click', () => {
@@ -130,6 +135,12 @@ class NanoMap {
       this.zoom -= 1
       this._recomputeLayout()
     })
+  }
+
+  _onScroll(evt) {
+    const val = evt.deltaY / 4 / 100
+
+    this.zoom += val
   }
 
   _recomputeLayout() {
@@ -156,6 +167,7 @@ class NanoMap {
     const layout = this._currentLayout
     const tileSize = this.crs.tileSize
 
+    this.ctx.strokeStyle = '#000'
     layout.forEach((tile) => {
       if(!tile['$elem']) {
         const img = document.createElement('img')
@@ -178,6 +190,15 @@ class NanoMap {
         }
       }
     })
+
+    this.ctx.strokeStyle = '#F00'
+    this.ctx.beginPath();
+    this.ctx.moveTo(this.width / 2, 0);
+    this.ctx.lineTo(this.width / 2, this.height);
+    this.ctx.moveTo(0, this.height / 2);
+    this.ctx.lineTo(this.width, this.height  / 2);
+    this.ctx.stroke();
+
   }
 
   _drawTile(tile, size) {
@@ -213,7 +234,6 @@ class NanoMap {
 
     const tiler = new MapTheTiles(null, this.crs.tileSize)
     const tiles = tiler.getTiles(layoutForBounds, this.zoom);
-    //const tiles = this.tiler.getTiles(layoutForBounds, this.zoom);
 
     return tiles.reduce((prev, next) => {
       const subdomainIndex = Math.abs(next.X + next.Y) % subdomains.length;
@@ -247,6 +267,7 @@ class NanoMap {
       x: width / 2,
       y: -height / 2
     }))
+
 
     return {
       bounds: [SWLatLng.lng, SWLatLng.lat, NELatLng.lng, NELatLng.lat], // [w, s, e, n]
@@ -303,8 +324,12 @@ class NanoMap {
 }
 
 const map = new NanoMap({
-  zoom: 10.5,
-  lat: 50,
-  lng: 19,
-  mapSelector: 'map'
+  zoom: 10,
+  lat: 50.20408905576835,
+  lng: 19.275099635124203,
+  mapSelector: 'map',
+  onZoom(zoom) {
+    const $zoom = document.getElementById('current_zoom')
+    $zoom.innerHTML = zoom;
+  }
 })
