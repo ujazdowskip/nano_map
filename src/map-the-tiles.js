@@ -11,9 +11,6 @@ const MapTheTiles = function (projExtent,tileSize) {
 
   this._resolutions = []
 
-  /*this.maxRes = Math.min(
-    Math.abs(this.projExtent.right - this.projExtent.left) / this.size,
-    Math.abs(this.projExtent.top - this.projExtent.bottom) / this.size);*/
   this.maxRes = Math.min(
     Math.abs(this.projExtent.right - this.projExtent.left) / 256,
     Math.abs(this.projExtent.top - this.projExtent.bottom) / 256);
@@ -21,23 +18,34 @@ const MapTheTiles = function (projExtent,tileSize) {
   for (let zoom = 0; zoom <= 20; zoom++) {
     this._resolutions.push(this.maxRes / Math.pow(2, zoom))
   }
-
-
 }
 
-MapTheTiles.prototype.tileExtent = function(z, x, y) {
-  const origin = [-20037508.342789244, 20037508.342789244]
+/*MapTheTiles.prototype.tileExtent = function(z, x, y) {
   const res = this._resolutions[z]
 
   const sizeXres = res * 256
 
-  const minX = origin[0] + x * sizeXres;
-  const minY = origin[1] + y * sizeXres;
+  const minX = this.projExtent.left + x * sizeXres;
+  const minY = this.projExtent.top + y * sizeXres;
 
   var maxX = minX + sizeXres;
   var maxY = minY + sizeXres;
 
   return [minX, minY, maxX, maxY]
+}*/
+
+MapTheTiles.prototype.getTileRangeForExtentAndResolution = function(extent, res) {
+  const lx = (extent.left - this.projExtent.left) / res
+  const rx = (extent.right - this.projExtent.left) / res
+  const ty = (this.projExtent.top - extent.top ) / res
+  const by = (this.projExtent.top - extent.bottom ) / res
+
+  return {
+    minX: Math.floor(lx / this.size),
+    maxX: Math.ceil(rx / this.size),
+    minY: Math.floor(ty / this.size),
+    maxY: Math.ceil(by / this.size)
+  }
 }
 
 MapTheTiles.prototype.getTiles = function(extent,zoom) {
@@ -48,51 +56,23 @@ MapTheTiles.prototype.getTiles = function(extent,zoom) {
   //const res = this.maxRes / edgeTileCount;
   const res = this._resolutions[Math.floor(zoom)]
 
-  //console.log('res', res)
-
-  console.log('resolutions', this._resolutions);
-
-
-  //console.log('maxRes', this.maxRes)
-
-  //console.log('SIZE', this.size)
-  //console.log('RES', res)
+  const tileRange = this.getTileRangeForExtentAndResolution(extent, res)
 
 
   //coordinated in pixel
-  /*const lx = Math.floor((extent.left - this.projExtent.left) / res)
-  const rx = Math.floor((extent.right - this.projExtent.left) / res)
-  const ty = Math.floor((this.projExtent.top - extent.top ) / res)
-  const by = Math.floor((this.projExtent.top - extent.bottom ) / res)*/
+  console.log('extent', extent);
   const lx = (extent.left - this.projExtent.left) / res
-  const rx = (extent.right - this.projExtent.left) / res
+  //const rx = (extent.right - this.projExtent.left) / res
   const ty = (this.projExtent.top - extent.top ) / res
-  const by = (this.projExtent.top - extent.bottom ) / res
+  //const by = (this.projExtent.top - extent.bottom ) / res
 
   //console.log('ty', ty);
 
   //Math.round ((bounds.left - this.maxExtent.left) / (res * this.tileSize.w))
 
-
-  const lX = Math.floor(lx/this.size) //left tile num
-  const rX = Math.ceil(rx/this.size) //right tile num
-
-  const tY = Math.floor(ty/this.size) //top tile num
-  const bY = Math.ceil(by/this.size) //bottom tile num
-
-  //top left tile position of top-left tile with respect to window/div
-
-  /*console.log('EDGE TILE COUNT', edgeTileCount);
-  console.log('MAX RES', this.maxRes);
-  console.log('SIZE', this.size)
-  console.log('RES', res)*/
-
-  //console.log('SIZE', this.size);
-
-
-  let left = (lX * this.size) - lx
-  let top = (tY * this.size) - ty
-  const topStart = (tY * this.size) - ty
+  let left = (tileRange.minX * this.size) - lx
+  let top = (tileRange.minY * this.size) - ty
+  const topStart = (tileRange.minY * this.size) - ty
 
 
 /*
@@ -107,10 +87,12 @@ MapTheTiles.prototype.getTiles = function(extent,zoom) {
 
   const tiles = []
 
+  for (var i = tileRange.minX; i <= tileRange.maxX; i++) {
 
-  for (var i=lX; i<=rX; i++) {
     top = topStart;
-    for(var j=tY; j<=bY; j++) {
+
+    for(var j = tileRange.minY; j <= tileRange.maxY; j++) {
+
       tiles.push({
         X:i,
         Y:j,
@@ -118,8 +100,10 @@ MapTheTiles.prototype.getTiles = function(extent,zoom) {
         top: top,
         left: left
       });
+
       top += this.size;
     }
+
     left += this.size;
   }
 
